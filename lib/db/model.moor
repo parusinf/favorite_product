@@ -1,0 +1,166 @@
+-- Таблицы --------------------------------------------------------------------
+-- Категории
+CREATE TABLE categories (
+  -- Идентификатор категории
+  id                 INT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Наименование категории
+  name               TEXT NOT NULL
+) AS Category;
+CREATE UNIQUE INDEX categories_index ON categories (name);
+
+-- Номенклатуры
+CREATE TABLE nomenclatures (
+  -- Идентификатор номенклатуры
+  id                 INT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Наименование номенклатуры
+  name               TEXT NOT NULL,
+  -- Идентификатор категории
+  categoryId         INT REFERENCES categories (id)
+);
+CREATE UNIQUE INDEX nomenclatures_index ON nomenclatures (name);
+
+-- Группы
+CREATE TABLE "groups" (
+  -- Идентификатор группы
+  id                 INT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Наименование группы
+  name               TEXT NOT NULL
+);
+CREATE UNIQUE INDEX groups_index ON "groups" (name);
+
+-- Продукты
+CREATE TABLE products (
+  -- Идентификатор продукта
+  id                 INT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Идентификатор группы
+  groupId            INT NOT NULL REFERENCES "groups" (id),
+  -- Идентификатор номенклатуры
+  nomenclatureId     INT NOT NULL REFERENCES nomenclatures (id),
+  -- Сумма
+  cost               REAL NOT NULL,
+  -- Дата покупки
+  date               DATE NOT NULL
+);
+CREATE INDEX products_index ON products (nomenclatureId, groupId);
+
+-- Настройки
+CREATE TABLE settings (
+  -- Идентификатор настройки
+  id                 INT NOT NULL PRIMARY KEY AUTOINCREMENT,
+  -- Наименование настройки
+  name               TEXT NOT NULL,
+  -- Текстовое значение
+  textValue          TEXT,
+  -- Целочисленное значение
+  intValue           INT,
+  -- Значение даты
+  dateValue          DATE
+);
+CREATE UNIQUE INDEX settings_index ON settings (name);
+
+-- Запросы --------------------------------------------------------------------
+-- Представление категорий
+_categoriesView:
+SELECT CAST((SELECT COUNT(*) FROM nomenclatures WHERE categoryId = C.id) AS INT) AS count,
+       C.name,
+       C.id
+  FROM categories C
+ ORDER BY 1 DESC, 2;
+
+-- Представление номенклатур
+_nomenclaturesView:
+SELECT CAST((SELECT COUNT(*) FROM products WHERE nomenclatureId = N.id) AS INT) AS count,
+       N.name,
+       N.id,
+       N.categoryId,
+       C.name as categoryName
+  FROM nomenclatures N
+ LEFT OUTER JOIN categories C ON C.id = N.categoryId
+ ORDER BY 1 DESC, 2;
+
+-- Представление групп с суммами продуктов
+_groupsView:
+SELECT CAST((SELECT IFNULL(SUM(cost), 0) FROM products WHERE groupId = G.id) AS REAL) AS cost,
+       CAST((SELECT COUNT(*) FROM products WHERE groupId = G.id) AS INT) AS count,
+       G.name,
+       G.id
+  FROM "groups" G
+ ORDER BY 1 DESC, 2;
+
+-- Первая группа в алфавитном порядке
+_firstGroup:
+SELECT *
+  FROM "groups"
+ WHERE name = (SELECT MIN(name) FROM "groups");
+
+-- Предыдущая группа перед заданной по наименованию
+_previousGroup:
+SELECT *
+  FROM "groups"
+ WHERE name = (SELECT MAX(name) FROM "groups" WHERE name < :groupName);
+
+-- Представление продуктов в группе в обратном хронологическом порядке
+_productsInGroup:
+SELECT P.id,
+       P.groupId,
+       P.nomenclatureId,
+       N.name AS nomenclatureName,
+       N.categoryId,
+       C.name AS categoryName,
+       P.cost,
+       P.date
+  FROM products P
+ INNER JOIN nomenclatures N ON N.id = P.nomenclatureId
+ LEFT OUTER JOIN categories C ON C.id = N.categoryId
+ WHERE P.groupId = :groupId
+ ORDER BY 1 DESC;
+
+-- Представление продуктов с группировкой по номенклатурам
+_productsByNomenclatures:
+SELECT IFNULL(SUM(P.cost), 0) AS cost,
+       COUNT(*) AS count,
+       N.name
+  FROM products P
+ INNER JOIN nomenclatures N ON N.id = P.nomenclatureId
+ WHERE P.groupId = :groupId
+ GROUP BY
+       N.name
+ ORDER BY 1 DESC, 2 DESC;
+
+-- Представление продуктов с группировкой по словам
+_productsByWords:
+SELECT IFNULL(SUM(P.cost), 0) AS cost,
+       COUNT(*) AS count,
+       SUBSTR(N.name, 1, CASE INSTR(N.name, ' ') WHEN 0 then LENGTH(N.name) ELSE INSTR(N.name, ' ') - 1 END) AS name
+  FROM products P
+ INNER JOIN nomenclatures N ON N.id = P.nomenclatureId
+ WHERE P.groupId = :groupId
+ GROUP BY
+       SUBSTR(N.name, 1, CASE INSTR(N.name, ' ') WHEN 0 then LENGTH(N.name) ELSE INSTR(N.name, ' ') - 1 END)
+ ORDER BY 1 DESC, 2 DESC;
+
+-- Представление продуктов с группировкой по категориям
+_productsByCategories:
+SELECT IFNULL(SUM(P.cost), 0) AS cost,
+       COUNT(*) AS count,
+       C.name
+  FROM products P
+ INNER JOIN nomenclatures N ON N.id = P.nomenclatureId
+ LEFT OUTER JOIN categories C ON C.id = N.categoryId
+ WHERE P.groupId = :groupId
+ GROUP BY
+       C.name
+ ORDER BY 1 DESC, 2 DESC;
+
+-- Активная группа
+_activeGroupStream:
+SELECT G.id,
+       G.name,
+       CAST((SELECT SUM(cost) FROM products WHERE groupId = G.id) AS REAL) AS cost
+  FROM settings S
+ INNER JOIN "groups" G ON G.id = S.intValue
+ WHERE S.name = 'activeGroupStream';
+
+-- Установка активной группы
+_setActiveGroup:
+UPDATE settings SET intValue = :id WHERE name = 'activeGroupStream';

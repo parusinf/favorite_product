@@ -1,0 +1,45 @@
+name: favorite_product
+description: Формируйте рейтинг продуктов для оптимизации затрат
+
+publish_to: 'none'
+
+version: 2020.12.7+3
+
+environment:
+  sdk: ">=2.7.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.0
+  sqflite:
+  moor:
+  sqlite3_flutter_libs:
+  path_provider:
+  rxdart:
+  provider:
+  permission_handler:
+  file_picker:
+  intl:
+  uni_links:
+  url_launcher:
+  flutter_markdown:
+  receive_sharing_intent:
+  flutter_share_content:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons:
+  moor_generator: ^3.3.1
+  build_runner: ^1.10.2
+
+flutter_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/icons/ic_favorite_product_512.png"
+
+flutter:
+  uses-material-design: true
